@@ -1,0 +1,4 @@
+# exclude Netlogo executables
+Netlogo/*.dmg
+Netlogo/*.exe
+Netlogo/*.tar*

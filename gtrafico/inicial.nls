@@ -1,0 +1,117 @@
+breed [nodos nodo]
+breed [vehículos vehículo]
+breed [obstáculos obstáculo] ;deja pasar, disminuyendo velocidad
+breed [barreras barrera] ; no deja pasar ;cambia de carril, de ser posible
+breed [semáforos semáforo]
+directed-link-breed [calles calle]
+directed-link-breed [linksems linksem]
+
+globals [
+  pnodo
+  snodo
+  un-nodo
+  es-pnodo?
+  sh-lnormal
+  sh-lselec
+  num-nodos-carga
+  CERCA
+  sh-origen
+  sh-destino
+  sh-nodo-normal
+  muestra-red?
+  reservar?
+  tamaño-nodo
+  velocidad-baja
+  velocidad-detenido
+  mensajitos?
+  ;;
+  sistema-de-semáforos
+  color-default-arista
+  color-default-nodo
+  color-default-obstáculo
+  color-default-barrera
+  color-default-semáforo
+  semáforos-visibles?
+  mouse-soltado?
+  mouse-presionado?
+  mouse-x
+  mouse-y
+  ;;
+  modelo-metainfo-lista
+  TEMPD ; directorio temporal
+  UNIX
+  bi?
+]
+nodos-own [
+  densidad
+  tipo
+  seleccionado?
+]
+semáforos-own [
+  seleccionado?
+  estados
+  mi-timer
+  estado-actual
+  tiempo-acumulado
+]
+
+vehículos-own [
+  metas
+  velocidad-deseada
+  calle-actual  
+  calle-siguiente
+  velocidad
+  arrivando-a-nodo?
+]
+calles-own [
+  semáforo-color-arista
+  es-semáforo-arista?
+  num-carriles
+]
+
+to inicializa-globales
+  set sh-lnormal "default" ; forma de la arista "normal" (no seleccionada)
+  set sh-lselec "selec" ; forma de la arista seleccionada
+  set sh-origen "square"
+  set sh-destino "square 2"
+  set sh-nodo-normal "circle"
+  set es-pnodo? false ; es primer nodo dentro de una selección multiple (p. ejem. para seleccionar una arista)
+  set CERCA .7 ; define "cerca" para seleccionar, por ejemplo
+  set acción-actual "añade-arista" ; var. que indica cual es la acción a ejecutar por el go
+  set muestra-red? true ; se está mostrando la red? (nodos y aristas)
+  set reservar? false
+  set tamaño-nodo 1
+  set velocidad-baja .125
+  set velocidad-detenido 0
+  set mensajitos? false ; MUESTRA MENSAJITOS
+  set sistema-de-semáforos nobody
+  set color-default-arista white
+  set color-default-nodo 48
+  set paleta-color color-default-nodo
+  set color-default-barrera 125
+  set color-default-obstáculo pink
+  set color-default-semáforo red
+  set-default-shape semáforos "emblem2"
+  set semáforos-visibles? true
+  set mouse-soltado? false
+  set mouse-presionado? false
+  set pnodo nobody
+  set snodo nobody
+  set bi? false ; era botón, pero calles bidireccionales se atoran fácilmente
+  set modelo-metainfo-lista []
+  ;;;;;;;;;;;;;;;
+  ifelse item 0 shell:pwd = "/" [set UNIX true][set UNIX false]
+  ;;;;;;;;;;;;;;;
+  set TEMPD (word "temp" (but-first but-first (word random-float 1)))
+end
+
+to setup
+  ca
+  inicializa-globales
+  set-default-shape nodos sh-nodo-normal ; pone la forma default de los nodos (nodo normal)
+  set-default-shape calles sh-lnormal ; pone la forma default de las aristas
+  set-default-shape vehículos "car top" ; forma de los vehículos
+  set-default-shape obstáculos "target"
+  set-default-shape barreras "x"
+  reset-ticks
+end

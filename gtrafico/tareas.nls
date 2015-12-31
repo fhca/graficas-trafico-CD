@@ -1,0 +1,166 @@
+
+to añade-meta
+  ;ask vehículos [
+    ;set meta (sentence meta (read-from-string nueva-meta))
+    ;if (verbose) [ show (fput "meta =" meta ) ]
+  ;]
+end
+
+to-report corre-t [tarea]
+  report run-result (word "tarea-" tarea)
+end
+
+to obedecer
+  if (not empty? metas) [
+    let meta-actual (first metas)
+    if meta-actual = ["die"] [die]
+    ifelse not empty? meta-actual [
+      let l length meta-actual
+      let s 0
+      foreach meta-actual [ if (corre-t ?) [set s s + 1] ]
+      if s = l [ set metas (bf metas) ] ; sólo quita la meta-actual si TODAS sus tareas devuelven true
+    ][set metas (bf metas)] ; .. o si no tiene nada
+  ]
+end
+
+to-report tarea-die ;no hace nada si hay mas tareas en esta meta
+  report True
+end
+
+to reemplaza-t [tarea-anterior tareas-nuevas] ; tarea-anterior es cadena, tareas-nuevas es lista o cadena
+  let ma first metas
+  set metas (bf metas)
+  let nuevameta []
+  foreach ma [
+    ifelse ? = tarea-anterior
+      [ set nuevameta (sentence nuevameta tareas-nuevas)]
+      [ set nuevameta (sentence nuevameta ?) ]
+  ]
+  set metas (sentence (list nuevameta) metas)
+end
+
+to-report tarea-camaleato-basico
+  reemplaza-t "camaleato-basico" ["pone-velocidad" "revisa-barreras" "puede-avanzar?" "revisa-obstáculos" "revisa-semáforos" 
+    "avanza" "llega-a-destino" ]
+  report False ; DEBE regresar False
+end
+
+to-report tarea-pone-velocidad ; ajusta la velocidad a la deseada
+  set velocidad velocidad-deseada
+  report True
+end
+
+to-report tarea-revisa-obstáculos
+  if hay-obstáculo? [
+    set velocidad velocidad-baja
+    if (mensajitos?) [show "obstáculo"]
+    report False
+  ]
+  report True
+end
+
+to-report tarea-revisa-barreras
+  if hay-barreras? [
+    set velocidad velocidad-detenido
+    if (mensajitos?) [show "barrera" ]
+    report False
+  ]
+  report True
+end
+
+to-report siguientes-calles ;vehiculo
+  report [my-out-calles] of siguiente-nodo
+end
+
+to-report semáforo-origen
+  report item 0 estados
+end
+
+to-report semáforo-destino ;reporta la calle destino que actualmente tiene el semáforo, nobody para rojo
+  if estado-actual = 0 [report nobody]
+  report item 0 (item (estado-actual - 1) (item 2 estados))
+end
+  
+to-report tarea-revisa-semáforos
+  if arrivando-a-nodo? [
+    if calle-siguiente = nobody [
+      set calle-siguiente one-of siguientes-calles
+    ]
+    ifelse hay-semáforos? [
+      let cac calle-actual
+      let sem one-of [mis-semáforos with [semáforo-origen = cac]] of siguiente-nodo
+      let cs calle-siguiente
+      ifelse sem != nobody and [semáforo-destino = cs] of sem [
+        set calle-actual calle-siguiente
+        set calle-siguiente nobody
+        face siguiente-nodo
+        report True
+      ]
+      [
+        set velocidad velocidad-detenido
+        report False
+      ]
+    ]
+    [
+      set calle-actual calle-siguiente
+      set calle-siguiente nobody
+      set velocidad velocidad-deseada
+    ]
+  ]
+  report True
+end    
+
+to-report tarea-puede-avanzar?
+  if not puede-avanzar? [
+    set velocidad velocidad-detenido
+    if (mensajitos?) [show "no puedo avanzar! :("]
+    report False
+  ]
+  report True
+end
+
+to orienta-vehículo
+  face siguiente-nodo
+end
+
+to-report siguiente-nodo
+  report [end2] of calle-actual
+end
+
+
+to-report tarea-avanza
+  if calle-actual = nobody and calle-siguiente = nobody [report True]
+  orienta-vehículo
+  let d distance siguiente-nodo
+  ifelse d > velocidad [ jump velocidad set arrivando-a-nodo? false]
+  [
+    set velocidad d ; y si no falta mucho...;avanza el restito
+    jump velocidad ;aquí ya llegamos a otro nodo
+    set arrivando-a-nodo? True
+  ] 
+  report True
+end
+
+to-report tarea-llega-a-destino
+  report arrivando-a-nodo? and (nodo-es-destino? siguiente-nodo)
+end
+
+
+to-report puede-avanzar?
+  report not any? other vehículos in-cone 1.5 40
+end
+
+to-report hay-obstáculo?
+  report any? obstáculos in-cone 1 40
+end
+
+to-report hay-barreras?
+  report any? barreras in-cone 1 40
+end
+
+to-report hay-semáforos?
+  report any? (nodos with [ any? mis-semáforos ]) in-cone 1 1
+end
+
+
+

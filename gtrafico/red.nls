@@ -1,0 +1,964 @@
+
+; ajuste de parámetros especiales para los nodos
+to ajusta-parámetros-nodo [donde]
+  ask donde [set seleccionado? false set color paleta-color set densidad paleta-densidad]
+end
+
+; ajuste de parámetros especiales para las barreras (de momento ninguno)
+to ajusta-parámetros-barrera [donde]
+end
+
+; ajuste de parámetros especiales para los obstáculos (de momento ninguno)
+to ajusta-parámetros-obstáculo [donde]
+end
+
+; ajuste de parámetros especiales para los semáforos (de momento ninguno)
+to ajusta-parámetros-semáforo [donde]
+  ask donde [
+    set seleccionado? false
+    ask donde [
+      let x xcor
+      let y ycor
+      ;if x > max-pxcor [ set x xcor - 1 ]
+      ;if y > max-pycor [ set y ycor - 1 ]
+      setxy x y
+    ] 
+    vincula-semáforo-a-calle donde (calle-cercana mouse-xcor mouse-ycor)
+  ]
+end
+
+; ajuste de parámetros en general
+to ajusta-parámetros [objeto dondo]
+  let s (word "ajusta-parámetros-" objeto " " dondo)
+  run s
+end
+
+; creación de objetos con click
+to crea-objeto [objeto donde x y]; objeto: string
+  let s (word "create-" objeto "s 1 [ set " donde " self setxy x y set color color-default-" objeto " set size tamaño-nodo]")
+  ;print s
+  run s
+  ajusta-parámetros objeto donde
+end
+
+to paleta-defaults
+  set paleta-color 48
+  set paleta-densidad .27
+end
+
+; creación de objetos con click
+to crea-nodo [donde x y]
+  crea-objeto "nodo" donde x y
+end
+
+; creación de objetos con click
+to crea-semáforo [donde x y]
+  crea-objeto "semáforo" donde x y
+end
+
+; creación de objetos con click
+to crea-semáforo-aislado [donde x y]
+  let s (word "create-semáforos 1 [ set " donde " self set seleccionado? false setxy x y set color color-default-semáforo set size tamaño-nodo]")
+  run s
+end
+
+; creación de objetos con click
+to crea-obstáculo [donde x y]
+  crea-objeto "obstáculo" donde x y
+end
+
+; creación de objetos con click
+to crea-barrera [donde x y]
+  crea-objeto "barrera" donde x y
+end
+
+; creación de objetos con click
+to acción-actual-añade [objeto]
+  if mouse-inside? [
+    if ratón-soltado? [
+      crea-objeto objeto "pnodo" mouse-xcor mouse-ycor
+      set pnodo nobody
+      ratón-limpia
+    ]
+  ]
+end
+
+; la reingeniería de estas acciones está incompleta, pero aún funciona (aún con duplicaciones)
+to acción-actual-añade-nodo
+  acción-actual-añade "nodo"
+end
+
+to acción-actual-añade-obstáculo
+  acción-actual-añade "obstáculo"
+end
+
+to acción-actual-añade-barrera
+  acción-actual-añade "barrera"
+end
+
+to acción-actual-añade-semáforo ; hacer click cerca de la punta de la flecha de una calle
+  acción-actual-añade "semáforo"
+end
+
+to acción-actual-añade-arista
+  if mouse-inside? [
+    ifelse pnodo = nobody [ ; empieza creacion de arista
+      if ratón-soltado? [
+        set pnodo nodo-cercano
+        if pnodo = nobody [ ; si no hay nodo cercano
+          crea-nodo "pnodo" mouse-xcor mouse-ycor  ;créalo
+        ]
+        ask pnodo [selecciona] ; pnodo es el nodo cercano o uno creado si no había cercano, lo selecciona
+        ratón-limpia
+      ]
+    ]
+    [ ; ya hubo un pnodo
+      if snodo = nobody [ ; si aún no hay segundo nodo
+        if ratón-soltado? [
+          set snodo nodo-cercano
+          ifelse snodo = nobody [ ; click al aire, créa nuevo snodo
+            crea-nodo "snodo" mouse-xcor mouse-ycor
+            ask snodo [
+              if (mensajitos?) [show "segundo nodo"]
+              ifelse bi? [aristaBi pnodo][ my-create-calle-from pnodo ]
+              ask pnodo [deselecciona]
+              set pnodo nobody
+              set snodo nobody
+            ]
+          ]
+          [; click sobre nodo existente
+            ifelse pnodo = snodo [ ; click sobre pnodo no permitido (loop), empieza desde principio
+              ask pnodo [deselecciona]
+              set pnodo nobody
+              set snodo nobody
+            ]
+            [
+              ask snodo [
+                if (mensajitos?) [show "segundo nodo"]
+                ifelse bi? [aristaBi pnodo][ my-create-calle-from pnodo ]
+                ask pnodo [deselecciona]
+                set pnodo nobody
+                set snodo nobody
+              ]
+            ]
+          ]
+          ratón-limpia
+        ]
+      ]
+    ]
+  ]
+end
+
+to acción-actual-invierte-sentido-de-calle
+  if mouse-inside? [
+    if ratón-soltado? [
+      ask calle-cercana mouse-xcor mouse-ycor [
+        let e2 end2
+        ask end1 [my-create-calle-from e2]
+        die
+      ]
+      ratón-limpia
+    ]
+  ]
+end
+
+to acción-actual-añade-nodo-a-arista
+  if mouse-inside? [
+    if ratón-soltado? [
+      let x mouse-xcor
+      let y mouse-ycor
+      let s calle-cercana x y
+      if s != nobody [
+        crea-nodo "pnodo" x y
+        ask s [
+          ask end1 [ if bi? [my-create-calle-from pnodo] my-create-calle-to pnodo ]
+          ask end2 [ if bi? [my-create-calle-to pnodo] my-create-calle-from pnodo ]
+          die
+        ]
+      ]
+      ratón-limpia
+      set pnodo nobody
+      set acción-actual "mueve-nodo"
+    ]
+  ]
+end
+
+to acción-actual-mueve [objeto]
+  if mouse-inside? [
+    ifelse ratón-soltado? [ ;se acaba el proceso
+      set pnodo nobody
+      ratón-limpia
+    ]
+    [
+      ifelse pnodo = nobody [ ;si no se ha escojido objeto
+        if mouse-down? [
+          set pnodo objeto-cercano objeto
+        ]
+      ]
+      [
+        ask pnodo [setxy mouse-xcor mouse-ycor]
+      ]
+    ]
+  ]
+end
+        
+
+to acción-actual-mueve-nodo
+  acción-actual-mueve nodos
+end
+
+to acción-actual-mueve-barrera
+  acción-actual-mueve barreras
+end
+
+to acción-actual-mueve-obstáculo
+  acción-actual-mueve obstáculos
+end
+
+to acción-actual-mueve-semáforo
+  acción-actual-mueve semáforos
+end
+
+to acción-actual-borra [objeto]
+  if ratón-soltado? [
+    let c objeto-cercano objeto
+    if c != nobody [
+      ask c [ die ]
+    ]
+    ratón-limpia
+  ]
+end
+
+to acción-actual-borra-nodo
+  acción-actual-borra nodos
+end
+
+to acción-actual-borra-obstáculo
+  acción-actual-borra obstáculos
+end
+
+to acción-actual-borra-barrera
+  acción-actual-borra barreras
+end
+
+to acción-actual-borra-semáforo
+  acción-actual-borra semáforos
+  if mouse-down? [
+    let c nodo-cercano
+    if c != nobody [
+      ask [out-linksem-neighbors] of c [die]
+    ]
+  ]
+end
+
+to acción-actual-mueve-nodos-seleccionados
+  if mouse-inside? [
+    ifelse ratón-soltado? [
+      set pnodo nobody
+      ratón-limpia
+    ]
+    [
+      ifelse pnodo = nobody [
+        if mouse-down? [
+          set mouse-x mouse-xcor
+          set mouse-y mouse-ycor
+          set pnodo 0
+        ]
+      ]
+      [
+        let mx mouse-xcor - mouse-x
+        let my mouse-ycor - mouse-y
+        let minx max-pxcor
+        let maxx min-pxcor
+        let miny max-pycor
+        let maxy min-pycor
+        let ns nodos-seleccionados
+        ask ns [
+          if xcor + mx <= minx [set minx xcor + mx]
+          if xcor + mx >= maxx [set maxx xcor + mx]
+          if ycor + my <= miny [set miny ycor + my]
+        if ycor + my >= maxy [set maxy ycor + my]
+        ]
+        if maxx <= max-pxcor and maxy <= max-pycor and minx >= min-pxcor and miny >= min-pycor [
+          ask ns [
+            setxy (xcor + mx) (ycor + my)
+          ]
+        ]
+        ask vehículos [orienta-vehículo]
+        set mouse-x mouse-xcor ;reinicia mouse-x para la nueva pos relativa del ratón
+        set mouse-y mouse-ycor
+      ]
+    ]
+  ]
+end
+
+to acción-actual-selecciona-arista
+  if mouse-inside? [
+    if ratón-soltado? [
+      ask calle-cercana mouse-xcor mouse-ycor [
+        toggle-selecciona-esta-arista
+        let seleccionada? shape = sh-lselec
+        ask both-ends [ifelse seleccionada? [selecciona][deselecciona]]
+      ]
+      ratón-limpia
+    ]
+  ]
+end
+
+
+to acción-actual-borra-arista
+  if ratón-soltado? [
+    deselecciona-toda-arista
+    let cc calle-cercana mouse-xcor mouse-ycor
+    if cc != nobody [ ask cc [ die ] ]
+    ratón-limpia
+  ]
+end
+
+to acción-actual-convierte-en-destino
+  if mouse-inside? [
+    if ratón-soltado? [
+      set pnodo nodo-cercano
+      if pnodo != nobody [
+        ask pnodo [toggle-convierte-en-destino]
+      ]
+      ratón-limpia
+    ]
+  ]
+end
+
+to acción-actual-convierte-en-origen
+  if mouse-inside? [
+    if ratón-soltado? [
+      set pnodo nodo-cercano
+      if pnodo != nobody [
+        ask pnodo [toggle-convierte-en-origen]
+      ]
+      ratón-limpia
+    ]
+  ]
+end
+
+to acción-actual-selecciona [objeto]
+  if mouse-inside? [
+    if ratón-soltado? [
+      set pnodo objeto-cercano objeto
+      ifelse pnodo = nobody [
+        if user-yes-or-no? "Deselecciona todos?" [ deselecciona-todo-nodo deselecciona-toda-arista ]
+      ]
+      [
+        ask pnodo [
+          toggle-selecciona
+          set pnodo nobody
+        ]
+      ]
+      ratón-limpia
+    ]
+  ]
+end
+
+to acción-actual-selecciona-nodo
+  acción-actual-selecciona nodos
+  ;ask one-of 
+end
+
+to acción-actual-selecciona-semáforo
+  acción-actual-selecciona semáforos
+  ;ask one-of 
+end
+
+to acción-actual-selec-semáforos-en-nodo
+  if mouse-inside? [
+    if ratón-soltado? [
+      set pnodo nodo-cercano
+      if pnodo != nobody [
+        ask [out-linksem-neighbors] of pnodo [
+          toggle-selecciona
+          set pnodo nobody
+        ]
+      ]
+      ratón-limpia
+    ]
+  ]
+end
+
+;----
+
+to colorea
+  if mouse-down? [
+    let c nodo-cercano
+    if c != nobody [
+      ask c [ set color paleta-color ]
+    ]
+  ]
+end
+
+; detecta objetos cercanos
+to-report objeto-cercanoxy [objetos x y] ; objetos = agentset
+  let cercano min-one-of objetos [distancexy x y]
+  ifelse cercano != nobody and [distancexy x y <= CERCA] of cercano [ report cercano ] [ report nobody ]
+end
+
+to-report objeto-cercano [objetos]
+  report objeto-cercanoxy objetos mouse-xcor mouse-ycor
+end
+
+to-report nodo-cercano
+  report objeto-cercano nodos
+end
+
+to-report barrera-cercana
+  report objeto-cercano barreras
+end
+
+to-report obstáculo-cercano
+  report objeto-cercano obstáculos
+end
+
+to-report semáforo-cercano
+  report objeto-cercano semáforos
+end
+
+; objetos seleccionables
+to selecciona
+  set seleccionado? true
+  set es-pnodo? false
+end
+
+to deselecciona
+  set seleccionado? false
+  set size tamaño-nodo
+  set es-pnodo? false
+end
+
+to toggle-selecciona
+  ifelse seleccionado? [ deselecciona ][ selecciona ]
+end
+
+; objetos seleccionados
+to-report nodos-seleccionados 
+  report nodos with [ seleccionado? ]
+end
+
+to-report semáforos-seleccionados 
+  report semáforos with [ seleccionado? ]
+end
+
+to-report nodos-no-seleccionados
+  report nodos with [ not seleccionado? ]
+end
+
+to selecciona-todo-nodo
+  ask nodos [ selecciona ]
+end
+
+to deselecciona-todo-nodo
+  ask nodos [ deselecciona ]
+end
+
+to selección-todos-los-nodos
+  ifelse any? nodos-no-seleccionados
+  [ selecciona-todo-nodo ]
+  [ deselecciona-todo-nodo ]
+end
+
+to-report aristas-seleccionadas
+  report calles with [shape = sh-lselec]
+end
+
+to-report aristas-no-seleccionadas
+  report calles with [shape != sh-lselec]
+end
+
+to selección-selecciona-nada ;deselecciona todo
+  deselecciona-todo-nodo
+  deselecciona-toda-arista
+end
+
+to selección-selecciona-todo
+  selecciona-todo-nodo
+  selecciona-toda-arista
+end
+
+to defaults-para-nuevas-aristas
+  ;selecciona-esta-arista
+  set color color-default-arista
+  set semáforo-color-arista color
+  set es-semáforo-arista? false
+  set num-carriles 1
+end
+
+to my-create-calle-to [o]
+  create-calle-to o [defaults-para-nuevas-aristas]
+end
+
+to my-create-calle-from [o]
+  create-calle-from o [defaults-para-nuevas-aristas]
+end
+
+to aristaBi [otroNodo]
+  my-create-calle-to otroNodo
+  my-create-calle-from otroNodo
+end
+
+; se puede detectar muchos ratones presionados pero solo un ratón soltado
+to-report ratón-soltado?
+  ifelse mouse-down? 
+  [ set mouse-presionado? true set mouse-soltado? false ]
+  [if mouse-presionado? [set mouse-soltado? true set mouse-presionado? false]] ;hacer mouse-soltado? false tan pronto se deje de usar
+  report mouse-soltado?
+end
+
+; usar siempre la estructura
+; if ratón-soltado? [
+;   ...
+;   ... operaciones a realizar si el ratón se soltó ...
+;   ...
+;   ratón-limpia ; para que no vuelva a "detectar" que el ratón se soltó
+; ]
+to ratón-limpia
+  set mouse-soltado? false
+  set mouse-presionado? false
+end
+
+
+to borra-aristas-de-selección
+  let s aristas-seleccionadas
+  if s != nobody [
+    ask s [
+      die
+    ]
+  ]
+end
+
+
+
+to selección-intercambia-nodos
+  let n nodos-no-seleccionados
+  deselecciona-todo-nodo
+  ask n [ selecciona ]
+end
+
+
+to invierte-direccion-aristas-seleccionadas
+  ask aristas-seleccionadas [
+    let e1 end1
+    let e2 end2
+    ask e1 [
+      let arista calle [who] of e1 [who] of e2
+      ifelse is-calle? arista [ask arista [die] my-create-calle-from e2 ]
+      [ask calle [who] of e2 [who] of e1 [die] my-create-calle-to e2 ]
+    ]
+  ]
+  ;set accion-actual "selecciona"
+end
+
+
+to-report link-distance [ x y ]
+  let a [ distancexy x y ] of end1
+  let b [ distancexy x y ] of end2
+  let c link-length
+  let d (0 - a ^ 2 + b ^ 2 + c ^ 2) / (2 * c)
+  if d > c [
+    report a
+  ]
+  if d < 0 [
+    report b
+  ]
+  report sqrt (abs (b ^ 2 - d ^ 2) )
+end
+
+to-report arista-cercana [x y]
+  report min-one-of links [link-distance x y]
+end
+
+to-report calle-cercana [x y]
+  report min-one-of calles [link-distance x y]
+end
+
+
+  
+to selección-añade-aristas-entre-nodos
+  ask nodos-seleccionados [ ask other nodos-seleccionados [my-create-calle-from myself] ]
+  deselecciona-todo-nodo
+end
+
+to selecciona-esta-arista ; en el contexto de arista a seleccionar
+  set shape sh-lselec
+end
+
+to deselecciona-esta-arista ; en el contexto de arista a seleccionar
+  set shape sh-lnormal
+end
+
+to toggle-selecciona-esta-arista
+  ifelse shape = sh-lselec [set shape sh-lnormal][set shape sh-lselec]
+end
+
+to selecciona-toda-arista
+  ask links [selecciona-esta-arista]
+end
+
+to deselecciona-toda-arista
+  ask links [ deselecciona-esta-arista ]
+end
+
+to selección-todas-las-aristas
+  ifelse any? aristas-no-seleccionadas
+  [ selecciona-toda-arista ]
+  [ deselecciona-toda-arista ]
+end
+
+to selección-intercambia-aristas
+  let n aristas-no-seleccionadas
+  deselecciona-toda-arista
+  ask n [selecciona-esta-arista]
+end
+
+;to kruskal
+;  deselecciona-toda-arista
+;  ask nodos [set valor who]
+;  foreach sort-on [link-length] calles [
+;    ask ? [
+;      let v0 [valor] of end1
+;      let v1 [valor] of end2
+;      if v0 != v1 [
+;        selecciona-esta-arista
+;        ask nodos with [valor = v1] [set valor v0]
+;      ]
+;    ]
+;  ]
+;end
+
+;to ordena-valores-de-nodos
+;  let consecutivo 0
+;  foreach sort nodos [
+;    ask ? [
+;      set valor consecutivo
+;      set consecutivo consecutivo + 1
+;    ]
+;  ]
+;end
+
+to-report arista-seleccionada? [a b]
+  report [shape = "sh-lselec"] of calle a b 
+end
+
+
+
+; TAMAÑOS DE NODOS
+
+to nodos-tamaño-pequeño
+  set tamaño-nodo .5
+  ask nodos [set size tamaño-nodo]
+  ask semáforos [set size tamaño-nodo]
+end
+
+to nodos-tamaño-mediano
+  set tamaño-nodo 1
+  ask nodos [set size tamaño-nodo]
+  ask semáforos [set size tamaño-nodo]
+end
+
+to nodos-tamaño-grande
+  set tamaño-nodo 2
+  ask nodos [set size tamaño-nodo]
+  ask semáforos [set size tamaño-nodo]
+end
+
+to convierte-en-nodo-normal
+  set shape sh-nodo-normal
+  set tipo 0
+end
+
+to convierte-en-origen
+  set shape sh-origen
+  set tipo 1
+end
+
+to convierte-en-destino
+  set shape sh-destino
+  set tipo 2
+end
+
+to toggle-convierte-en-origen
+  ifelse es-origen? [ convierte-en-nodo-normal ] [ convierte-en-origen ]
+end
+
+to toggle-convierte-en-destino
+  ifelse es-destino? [ convierte-en-nodo-normal ] [ convierte-en-destino ]
+end
+
+
+to-report es-origen?
+  report tipo = 1
+end
+
+to-report nodo-es-origen? [unnodo]
+  report [es-origen?] of unnodo
+end
+
+to-report es-destino?
+  report tipo = 2
+end
+
+to-report nodo-es-destino? [unnodo]
+  report [es-destino?] of unnodo
+end
+
+to detecta-origenes-destinos ;colorea autom nodos detectados como fuentes y destinos
+  deselecciona-todo-nodo
+  deselecciona-toda-arista
+  ask nodos with [count in-calle-neighbors = 0 and count out-calle-neighbors > 0 ] [convierte-en-origen]
+  ask nodos with [count out-calle-neighbors = 0 and count in-calle-neighbors > 0] [convierte-en-destino]
+end
+
+to oculta-red-completa
+  ask nodos [ ht ]
+  ask links [ hide-link ]
+end
+
+to muestra-red-completa
+  ask nodos [ show-turtle ]
+  ask links [ show-link ]
+end
+
+to toggle-oculta-red-completa
+  ifelse muestra-red? [
+    if (mensajitos?) [show "ocultando red..."]
+    oculta-red-completa
+    set muestra-red? false
+  ]
+  [
+    if (mensajitos?) [show "mostrando red..."]
+    muestra-red-completa
+    set muestra-red? true
+  ]
+end
+
+; operaciones con "selección" (nodos o aristas seleccionados)
+
+to aplica-a-seleccionados
+  run (word "selección-" selección)
+end
+
+to-report colores-de-semáforo
+  report [semáforo-color-arista] of my-out-calles
+end
+
+to nodo-a-semáforo ;;; EDITAR
+  ask my-out-calles [set semáforo-color-arista one-of base-colors set es-semáforo-arista? true ]
+end
+
+to-report semáforos-aristas
+  report calles with [es-semáforo-arista?]
+end
+
+to intenta-mostrar-semáforos ; los muestra si y sólo si semáforos-visibles? = true
+  ifelse semáforos-visibles? [
+    ask semáforos [st]
+    ask semáforos-aristas [set color semáforo-color-arista]
+  ]
+  [
+    ask semáforos [ht]
+    ask semáforos-aristas [set color color-default-arista]
+  ]    
+end
+
+to selección-construye-sistema-de-semáforos
+   ask nodos-seleccionados [
+     nodo-a-semáforo
+   ]
+end
+
+
+to-report mis-semáforos ;aplicado a nodos
+  report out-linksem-neighbors
+end
+
+to vincula-semáforo-a-calle [sem calle-origen]; estados = [calle-origen [calles-de-vuelta-continua] [[calle1 tiempo1] [calle2 tiempo2]...] tiempo-para-el-rojo]
+  if calle-origen != nobody [
+    ask sem [
+      ask [end2] of calle-origen [
+        create-linksem-to sem [tie]
+        deselecciona
+      ]
+      set estados map [(list ? .5)] ([sort my-out-calles] of ([end2] of calle-origen)) ; cada calle de salida es un estado, seguida del tiempo que demora en el
+      set estados (list calle-origen (list) estados .5) ; por lo pronto sin calles-de-vuelta-continua y .5 para el rojo
+      ;acumulemos los tiempos en la lista tiempo-acumulado
+      set mi-timer timer
+      let suma item 3 estados
+      set tiempo-acumulado (list suma) ; lista de momentos en que debe cambiar de estado, empieza con rojo
+      foreach item 2 estados [
+        set suma suma + item 1 ?
+        set tiempo-acumulado lput suma tiempo-acumulado
+      ]
+      ;estado inicial
+      set estado-actual 0 ;rojo (ALTO) por default
+    ]
+  ]
+end
+
+;to detecta-semáforos
+;  deselecciona-toda-arista
+;  deselecciona-todo-nodo
+;  let s nodos with [not es-semáforo? and count out-calle-neighbors > 1]
+;  ask s [ nodo-a-semáforo ]
+;  intenta-mostrar-semáforos
+;  ask semáforos [selecciona]
+;  if (mensajitos?) [show semáforos show semáforos-aristas]
+;end
+
+to toggle-muestra-semáforos
+  set semáforos-visibles? not semáforos-visibles?
+  intenta-mostrar-semáforos
+end
+
+to cambia-semáforos
+  ask semáforos [
+    every .1 [
+      if timer - mi-timer > item estado-actual tiempo-acumulado [
+        set estado-actual estado-actual + 1
+        if estado-actual > length item 2 estados [
+          set estado-actual 0
+          set mi-timer timer
+        ]
+      ]
+    ]
+  ]
+end
+
+to sincroniza-semáforos
+  let labels-para-calles "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+  let sselec semáforos with [seleccionado?]
+  if any? sselec [
+    let calles-origen [] ; [calle1 calle3 ...]
+    let calles-etiquetadas [] ;[calle1 calle2 calle 3 ...]
+    let parejas [] ; [[origen1 destino1] [o2 d2] ...]
+    let et-calles 0
+    let et-origen 0
+    let fases []  ; [ [et-p1] [et-p2 et-p3] [et-p4] ...)
+    let et-parejas 0
+    ask calles [set label ""]
+    ask sselec [
+      let este-semáforo self
+      ask item 0 estados [ ; calle origen (de este-semaforo)
+        if empty? label [
+          set calles-origen lput self calles-origen
+          set calles-etiquetadas lput self calles-etiquetadas
+          set label item et-calles labels-para-calles
+          set et-calles et-calles + 1
+        ]
+        set et-origen label
+      ]
+      let n-destino 0
+      foreach item 2 estados [ ; destinos
+        ask item 0 ? [  ; ignora item1 (tiempo)
+          if self != nobody [  ; destino = nobody : stop en esa fase
+            if empty? label [
+              set calles-etiquetadas lput self calles-etiquetadas
+              set label item et-calles labels-para-calles
+              set et-calles et-calles + 1
+            ]
+            set parejas lput (list et-origen label) parejas
+            ifelse length fases < n-destino + 1 [
+              set fases lput (list et-parejas) fases
+            ]
+            [
+              set fases replace-item n-destino fases lput et-parejas item n-destino fases
+            ]
+            set et-parejas et-parejas + 1
+          ]
+          set n-destino n-destino + 1
+        ]
+      ]
+    ]
+    ; antes de permitir modificar fases, sincroniza lo que se pueda
+    ; separando parejas con mismo destino en fases diferentes
+    let nuevasfases []
+    foreach fases [
+      let nuevafaseactual []
+      let numerodepareja 0
+      foreach ? [  ; para cada pareja de la fase actual
+        let pareja-actual ?
+        ifelse numerodepareja = 0 [
+          set nuevafaseactual (list pareja-actual)
+        ]
+        [
+          ifelse item 1 item pareja-actual parejas = item 1 item (last nuevafaseactual) parejas [  ; item1 de la pareja es el destino
+            set nuevasfases lput nuevafaseactual nuevasfases
+            set nuevafaseactual (list pareja-actual)
+            set numerodepareja 1  ; en la nuevafaseactual
+          ]
+          [
+            set nuevafaseactual lput pareja-actual nuevafaseactual
+          ]
+        ]
+        set numerodepareja numerodepareja + 1
+      ]
+      set nuevasfases lput nuevafaseactual nuevasfases
+    ]
+    
+    ; otra idea (reemplaza desde "antes de permitir...)
+    ; una fase por origen por destino para el nodo con in-degree * out-degree mas grande
+    set nuevasfases []
+    foreach fases [
+      let nuevafaseactual []
+      let etiquetas []
+      foreach ? [
+        ifelse empty? nuevafaseactual [
+          set nuevafaseactual []
+          set etiquetas lput (item 1 item ? parejas) etiquetas
+        ]
+        [
+          
+        ]
+      ]
+    ]
+    
+    ; hacer:
+    ; contruir las parejas origenes-destinos numeradas OK
+    ; construir la lista de las fases a partir de la numeración OK?
+    ; permitir modificar las fases
+    ; traducir las fases a estados de semáforos
+    show parejas
+    show calles-etiquetadas
+    show fases
+    show nuevasfases
+  ]
+end
+
+to selección-haz-orígenes
+  let n nodos-seleccionados
+  if any? n [
+    ask n [ convierte-en-origen ]
+  ]
+end
+
+to selección-haz-destinos
+  let n nodos-seleccionados
+  if any? n [
+    ask n [ convierte-en-destino ]
+  ]
+end
+
+to selección-haz-nodos-normales
+  let n nodos-seleccionados
+  if any? n [
+    ask n [ convierte-en-nodo-normal ]
+  ]
+end
+
+to modifica-tipo-de-nodo [n]
+  ifelse n = 0 [ convierte-en-nodo-normal ]
+  [ifelse n = 1 [ convierte-en-origen ]
+    [if n = 2 [ convierte-en-destino ]
+    ]
+  ]
+end
+
+
+to borrar-red
+  ask nodos [die] ; aristas se borran como consecuencia
+  ask semáforos [die]
+end
